@@ -1,0 +1,126 @@
+! ================================================================
+! SW7 — Switch Acceso L2 Bodega (Cisco vios_l2)
+! ================================================================
+configure terminal
+
+hostname SW7
+ip domain-name surnet.local
+service password-encryption
+enable secret SW7
+username SW7 privilege 15 secret SW7
+no ip domain-lookup
+
+banner motd ^
+ACCESO RESTRINGIDO - Solo personal autorizado
+^
+
+crypto key generate rsa modulus 2048
+ip ssh version 2
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: VLANs
+vlan 30
+ name Administracion
+vlan 60
+ name Operaciones
+vlan 70
+ name Bodega
+vlan 99
+ name Servicios
+ exit
+
+! BLOQUE 3: TRUNKS Y PORT-CHANNEL
+interface GigabitEthernet0/2
+ description Trunk hacia SW5
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 30,60,70,99
+ no shutdown
+ exit
+
+interface GigabitEthernet2/0
+ description Trunk hacia SW6
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 30,60,70,99
+ no shutdown
+ exit
+
+interface GigabitEthernet2/1
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface GigabitEthernet2/2
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description Cross-link hacia SW8 (LACP)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 30,60,70,99
+ no shutdown
+ exit
+
+! BLOQUE 4: PUERTOS DE ACCESO
+interface GigabitEthernet1/0
+ description Laptop Operaciones - VLAN 60
+ switchport mode access
+ switchport access vlan 60
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+interface GigabitEthernet1/1
+ description Laptop Bodega - VLAN 70
+ switchport mode access
+ switchport access vlan 70
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ description Laptop Administracion-bodega - VLAN 30
+ switchport mode access
+ switchport access vlan 30
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+interface FastEthernet0/11
+ description Camara-1 IoT - VLAN 99
+ switchport mode access
+ switchport access vlan 99
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! BLOQUE 5: INTERFAZ DE MANAGEMENT
+interface Vlan30
+ description Interfaz de gestion del switch
+ ip address 192.168.2.20 255.255.255.240
+ no shutdown
+ exit
+
+ip default-gateway 192.168.2.17
+
+end
+write memory

@@ -1,0 +1,178 @@
+! ================================================================
+! SW5 — Switch Distribución L3 Bodega (Cisco vios_l2)
+! HSRP Activo (priority 110) — Spanning-Tree Root Primary
+! ================================================================
+configure terminal
+
+! BLOQUE 1: BÁSICA
+hostname SW5
+ip domain-name surnet.local
+ip routing
+service password-encryption
+enable secret SW5
+username SW5 privilege 15 secret SW5
+no ip domain-lookup
+
+banner motd ^
+ACCESO RESTRINGIDO - Solo personal autorizado
+^
+
+crypto key generate rsa modulus 2048
+ip ssh version 2
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: VLANs
+vlan 30
+ name Administracion
+vlan 60
+ name Operaciones
+vlan 70
+ name Bodega
+vlan 99
+ name Servicios
+ exit
+
+! BLOQUE 3: INTERFACES L3
+interface Loopback0
+ description Loopback - Router-ID OSPF
+ ip address 10.0.2.21 255.255.255.255
+ no shutdown
+ exit
+
+interface GigabitEthernet0/0
+ description P2P hacia R3 G0/0
+ no switchport
+ ip address 192.168.20.10 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ description P2P hacia R4 G0/0 (cruzado)
+ no switchport
+ ip address 192.168.20.18 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet2/1
+ no switchport
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface GigabitEthernet2/2
+ no switchport
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description Inter-distribution SW5-SW6 (LACP)
+ no switchport
+ ip address 192.168.20.25 255.255.255.252
+ no shutdown
+ exit
+
+! BLOQUE 4: TRUNKS Y ACCESO
+interface GigabitEthernet0/2
+ description Trunk hacia SW7
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 30,60,70,99
+ no shutdown
+ exit
+
+interface GigabitEthernet2/0
+ description Trunk hacia SW8
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 30,60,70,99
+ no shutdown
+ exit
+
+interface GigabitEthernet1/0
+ description Puerto Server-Bodega (NIC1)
+ switchport mode access
+ switchport access vlan 99
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! BLOQUE 5: SVIs CON HSRP Y DHCP RELAY (SW5 = HSRP activo, priority 110)
+interface Vlan30
+ description Gateway VLAN 30 - Administracion Bodega
+ ip address 192.168.2.18 255.255.255.240
+ standby 30 ip 192.168.2.17
+ standby 30 priority 110
+ standby 30 preempt
+ ip helper-address 192.168.2.81
+ no shutdown
+ exit
+
+interface Vlan60
+ description Gateway VLAN 60 - Operaciones
+ ip address 192.168.2.2 255.255.255.240
+ standby 60 ip 192.168.2.1
+ standby 60 priority 110
+ standby 60 preempt
+ ip helper-address 192.168.2.81
+ no shutdown
+ exit
+
+interface Vlan70
+ description Gateway VLAN 70 - Bodega
+ ip address 192.168.2.34 255.255.255.240
+ standby 70 ip 192.168.2.33
+ standby 70 priority 110
+ standby 70 preempt
+ ip helper-address 192.168.2.81
+ no shutdown
+ exit
+
+interface Vlan99
+ description Gateway VLAN 99 - Servicios
+ ip address 192.168.2.82 255.255.255.240
+ standby 99 ip 192.168.2.81
+ standby 99 priority 110
+ standby 99 preempt
+ no shutdown
+ exit
+
+! BLOQUE 6: DHCP LOCAL PARA VLAN 99
+ip dhcp excluded-address 192.168.2.80 192.168.2.84
+ip dhcp pool VLAN99-LOCAL
+ network 192.168.2.80 255.255.255.240
+ default-router 192.168.2.81
+ dns-server 8.8.8.8
+ exit
+
+! BLOQUE 7: OSPF
+router ospf 2
+ router-id 10.0.2.21
+ network 10.0.2.21 0.0.0.0 area 0
+ network 192.168.20.8 0.0.0.3 area 0
+ network 192.168.20.16 0.0.0.3 area 0
+ network 192.168.20.24 0.0.0.3 area 0
+ network 192.168.2.0 0.0.0.15 area 2
+ network 192.168.2.16 0.0.0.15 area 2
+ network 192.168.2.32 0.0.0.15 area 2
+ network 192.168.2.80 0.0.0.15 area 2
+ exit
+
+! BLOQUE 8: SPANNING-TREE (SW5 = root primary todas las VLANs Bodega)
+spanning-tree vlan 30,60,70,99 root primary
+
+end
+write memory

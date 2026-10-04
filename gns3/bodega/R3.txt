@@ -1,0 +1,78 @@
+! ================================================================
+! R3 — Router Core Bodega (Cisco IOSv 15.6(2)T)
+! ================================================================
+configure terminal
+
+! BLOQUE 1: CONFIGURACIÓN BÁSICA / HARDENING
+hostname R3
+ip domain-name surnet.local
+service password-encryption
+enable secret R3
+username R3 privilege 15 secret R3
+
+banner motd ^
+ACCESO RESTRINGIDO - Solo personal autorizado
+^
+
+crypto key generate rsa modulus 2048
+ip ssh version 2
+no ip domain-lookup
+
+line console 0
+ password R3
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ password R3
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: INTERFACES Y DIRECCIONAMIENTO
+interface Loopback0
+ description Loopback - Router-ID OSPF
+ ip address 10.0.2.11 255.255.255.255
+ no shutdown
+ exit
+
+interface GigabitEthernet0/0
+ description P2P hacia SW5 G0/0
+ ip address 192.168.20.9 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ description P2P hacia SW6 G0/1
+ ip address 192.168.20.13 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/2
+ description P2P hacia FW2 G0/2
+ ip address 192.168.20.2 255.255.255.252
+ no shutdown
+ exit
+
+! BLOQUE 3: OSPF
+router ospf 2
+ router-id 10.0.2.11
+ network 10.0.2.11 0.0.0.0 area 0
+ network 192.168.20.0 0.0.0.3 area 0
+ network 192.168.20.8 0.0.0.3 area 0
+ network 192.168.20.12 0.0.0.3 area 0
+ redistribute static subnets
+ default-information originate
+ exit
+
+! BLOQUE 4: RUTA DEFAULT Y RUTAS ESTÁTICAS HACIA OFICINA
+ip route 0.0.0.0 0.0.0.0 192.168.20.1          ! Ruta default hacia internet (via FW2)
+ip route 192.168.1.0 255.255.255.0 192.168.20.1  ! Red LAN Oficina (via VPN en FW2)
+ip route 192.168.10.0 255.255.255.0 192.168.20.1 ! Infraestructura Oficina (via VPN en FW2)
+
+end
+write memory

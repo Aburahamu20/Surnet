@@ -1,0 +1,142 @@
+! ================================================================
+! FW2 — Firewall Perimetral Bodega (Cisco IOSv 15.6(2)T)
+! Zone-Based Firewall + NAT/PAT + IPsec VPN hacia FW1
+! ================================================================
+configure terminal
+
+! BLOQUE 1: CONFIGURACIÓN BÁSICA / HARDENING
+hostname FW2
+ip domain-name surnet.local
+service password-encryption
+enable secret FW2
+username FW2 privilege 15 secret FW2
+
+banner motd ^
+ACCESO RESTRINGIDO - Solo personal autorizado
+^
+
+crypto key generate rsa modulus 2048
+ip ssh version 2
+no ip domain-lookup
+
+line console 0
+ password FW2
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ password FW2
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: INTERFACES Y DIRECCIONAMIENTO
+interface GigabitEthernet0/0
+ description WAN hacia ISP G0/0
+ ip address 200.1.1.2 255.255.255.252
+ ip nat outside
+ zone-member security WAN
+ no shutdown
+ exit
+
+interface GigabitEthernet0/2
+ description LAN hacia R3 G0/2
+ ip address 192.168.20.1 255.255.255.252
+ ip nat inside
+ zone-member security LAN
+ no shutdown
+ exit
+
+interface GigabitEthernet0/3
+ description LAN hacia R4 G0/3
+ ip address 192.168.20.5 255.255.255.252
+ ip nat inside
+ zone-member security LAN
+ no shutdown
+ exit
+
+! BLOQUE 3: RUTA DEFAULT HACIA ISP
+ip route 0.0.0.0 0.0.0.0 200.1.1.1
+
+! BLOQUE 4: NAT DE SALIDA (PAT)
+ip access-list extended NAT-LAN
+ deny ip 192.168.2.0 0.0.0.255 192.168.1.0 0.0.0.255
+ deny ip 192.168.2.0 0.0.0.255 192.168.10.0 0.0.0.255
+ deny ip 192.168.20.0 0.0.0.255 192.168.1.0 0.0.0.255
+ deny ip 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255
+ permit ip 192.168.2.0 0.0.0.255 any
+ permit ip 192.168.20.0 0.0.0.255 any
+
+ip nat inside source list NAT-LAN interface GigabitEthernet0/0 overload
+
+! BLOQUE 5: ZONE-BASED FIREWALL (ZFW)
+zone security LAN
+zone security WAN
+
+class-map type inspect match-any LAN-TO-WAN-CLASS
+ match protocol tcp
+ match protocol udp
+ match protocol icmp
+
+policy-map type inspect LAN-TO-WAN-POLICY
+ class type inspect LAN-TO-WAN-CLASS
+  inspect
+ class class-default
+  drop
+
+zone-pair security LAN-TO-WAN source LAN destination WAN
+ service-policy type inspect LAN-TO-WAN-POLICY
+
+! WAN -> LAN: trafico VPN decifrado entrante
+ip access-list extended 101
+ permit ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255
+ permit ip 192.168.1.0 0.0.0.255 192.168.20.0 0.0.0.255
+ permit ip 192.168.10.0 0.0.0.255 192.168.2.0 0.0.0.255
+ permit ip 192.168.10.0 0.0.0.255 192.168.20.0 0.0.0.255
+
+class-map type inspect match-all WAN-TO-LAN-CLASS
+ match access-group 101
+
+policy-map type inspect WAN-TO-LAN-POLICY
+ class type inspect WAN-TO-LAN-CLASS
+  pass
+ class class-default
+  drop
+
+zone-pair security WAN-TO-LAN source WAN destination LAN
+ service-policy type inspect WAN-TO-LAN-POLICY
+
+! BLOQUE 6: VPN IPSEC HACIA FW1 (Oficina)
+crypto isakmp policy 10
+ encryption aes 256
+ authentication pre-share
+ group 14
+
+crypto isakmp key Surnet@Ipsec24 address 200.1.1.6
+
+crypto ipsec transform-set TS esp-aes 256 esp-sha-hmac
+ mode tunnel
+
+ip access-list extended 100
+ permit ip 192.168.2.0 0.0.0.255 192.168.1.0 0.0.0.255
+ permit ip 192.168.2.0 0.0.0.255 192.168.10.0 0.0.0.255
+ permit ip 192.168.20.0 0.0.0.255 192.168.1.0 0.0.0.255
+ permit ip 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255
+
+crypto map VPN-OFICINA 10 ipsec-isakmp
+ set peer 200.1.1.6
+ set transform-set TS
+ match address 100
+
+interface GigabitEthernet0/0
+ crypto map VPN-OFICINA
+
+ip route 192.168.2.0 255.255.255.0 192.168.20.2
+ip route 192.168.20.0 255.255.255.0 192.168.20.2
+
+end
+write memory
