@@ -1,0 +1,22 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archivos temporales
+*.tmp
+*.log
+*.bak
+
+# GNS3 — archivos de proyecto locales (no subir topologías con rutas absolutas)
+*.gns3
+*.gns3x
+
+# Packet Tracer — archivos de simulación grandes
+# Comenta la siguiente línea si quieres versionar el .pkt
+*.pkt
+*.pkz
+
+# Editors
+.vscode/
+.idea/
