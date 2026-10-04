@@ -1,0 +1,51 @@
+! ================================================================
+! ISP — Router ISP Simulado (Cisco IOSv 15.6(2)T)
+! ================================================================
+configure terminal
+
+hostname ISP
+ip domain-name surnet.local
+service password-encryption
+enable secret ISP
+no ip domain-lookup
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: INTERFACES
+interface GigabitEthernet0/0
+ description Enlace hacia FW2 (Bodega)
+ ip address 200.1.1.1 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ description Enlace hacia Server DNS (8.8.8.8)
+ ip address 8.8.8.1 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/2
+ description Enlace hacia FW1 (Oficina)
+ ip address 200.1.1.5 255.255.255.252
+ no shutdown
+ exit
+
+! BLOQUE 3: RUTAS ESTÁTICAS
+ip route 192.168.1.0 255.255.255.0 200.1.1.6   ! Red LAN Oficina
+ip route 192.168.10.0 255.255.255.0 200.1.1.6  ! Infraestructura Oficina
+ip route 192.168.2.0 255.255.255.0 200.1.1.2   ! Red LAN Bodega
+ip route 192.168.20.0 255.255.255.0 200.1.1.2  ! Infraestructura Bodega
+
+end
+write memory

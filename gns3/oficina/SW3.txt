@@ -1,0 +1,103 @@
+! ================================================================
+! SW3 — Switch Acceso L2 Oficina (Cisco vios_l2)
+! ================================================================
+configure terminal
+
+hostname SW3
+ip domain-name surnet.local
+service password-encryption
+enable secret SW3
+username SW3 privilege 15 secret SW3
+no ip domain-lookup
+
+banner motd ^
+ACCESO RESTRINGIDO - Solo personal autorizado
+^
+
+crypto key generate rsa modulus 2048
+ip ssh version 2
+
+line console 0
+ login local
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+line vty 0 4
+ login local
+ transport input ssh
+ logging synchronous
+ exec-timeout 5 0
+ exit
+
+! BLOQUE 2: VLANs
+vlan 10
+ name RRHH
+vlan 20
+ name Ventas
+vlan 30
+ name Administracion
+vlan 40
+ name Gerencia
+vlan 50
+ name Visitas
+vlan 99
+ name Servicios
+ exit
+
+! BLOQUE 3: TRUNKS Y PORT-CHANNEL
+interface GigabitEthernet0/2
+ description Trunk hacia SW1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,99
+ no shutdown
+ exit
+
+interface GigabitEthernet2/0
+ description Trunk hacia SW2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,99
+ no shutdown
+ exit
+
+interface GigabitEthernet2/1
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface GigabitEthernet2/2
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description Cross-link hacia SW4 (LACP)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,99
+ no shutdown
+ exit
+
+! BLOQUE 4: PUERTOS DE ACCESO
+interface GigabitEthernet1/1
+ description PC Linux (e0) - VLAN 10 RRHH
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! BLOQUE 5: INTERFAZ DE MANAGEMENT
+interface Vlan30
+ description Interfaz de gestion del switch
+ ip address 192.168.1.68 255.255.255.240
+ no shutdown
+ exit
+
+ip default-gateway 192.168.1.65
+
+end
+write memory
